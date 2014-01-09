@@ -1,0 +1,549 @@
+using System;
+using System.Collections;
+using System.Drawing;
+using Microsoft.DirectX;
+using Microsoft.DirectX.Direct3D;
+
+using MyGelloidSharp.Math;
+
+namespace MyGelloidSharp.PhysEnv {
+	public class CGelloid {
+		static public double defaultKs = 5.0;
+		static public double defaultKd = 0.1;
+		static public double minTolerance = 0.01;
+
+		public class CParticle {
+			public CVector3 position; // Position of Particle
+			public CVector3 velocity; // Velocity of Particle
+			public CVector3 force; // Force acting on Particle
+			public double oneOverMass; // 1 / Mass of Particle
+
+			public CParticle() {
+				position = new CVector3( 0, 0, 0 );
+				velocity = new CVector3( 0, 0, 0 );
+				force = new CVector3( 0, 0, 0 );
+				oneOverMass = 1.0;
+			}
+
+			public void Copy( CParticle particle ) {
+				position = new CVector3( particle.position );
+				velocity = new CVector3( particle.velocity );
+				force = new CVector3( particle.force );
+				oneOverMass = particle.oneOverMass;
+			}
+		}
+		public class CSpring {
+			public enum ESpringKind { STRUCTURAL, SHEAR, BEND, MANUAL };
+
+			public int p1, p2; // Particle bonded by Spring
+			public double restLength; // Length of Spring at rest
+			public double Ks; // Spring constant
+			public double Kd; // Spring damping
+			public ESpringKind kind; // Spring kind
+
+			public CSpring() {
+				p1 = p2 = 0;
+				restLength = 1.0;
+				Ks = defaultKs;
+				Kd = defaultKd;
+				kind = ESpringKind.STRUCTURAL;
+			}
+		}
+
+		public ArrayList[] particles; // Particles in the Gelloid (0: original, 1 and 2: working datas)
+		public ArrayList currentSystem, targetSystem; // Pointer to current and target Particles system
+
+		public ArrayList springs; // Springs in the Gelloid
+
+		public ArrayList colliders; // Colliders
+
+		public double Kd = 0.04; // Damping factor
+		public double Kr = 0.6; // 1.0 = Superball bounce  0.0 = Dead Weight
+		public double Ksh = 5.0; // Hook's Spring constant
+		public double Ksd = 0.1; // Spring Damping constant
+		public CVector3 gravity = new CVector3( 0, -0.2, 0 );
+
+		// Used by Render methods
+		private Device device;
+		private MyFont font;
+		private VertexBuffer vBuffer;
+		private IndexBuffer iBuffer;
+		private CustomVertex.PositionColored[] vertices;
+		private short[] indices;
+		private Material[] materials;
+
+		private double minHTerm, maxHTerm, minDTerm, maxDTerm; // Internal use for Statistics
+			
+		public CGelloid() {
+			particles = new ArrayList[3];
+			particles[0] = new ArrayList();
+			particles[1] = new ArrayList();
+			particles[2] = new ArrayList();
+			springs = new ArrayList();
+			colliders = new ArrayList();
+			currentSystem = targetSystem = particles[0]; // While Initialize() is not called, we use Original system as current system
+		}
+
+
+		// Methods used by CreateCube
+		static private int _CalcPointNum( int x, int y, int z, int xsize, int ysize, int zsize ) {
+			int p = z * ysize;
+			p = ( p + y ) * xsize;
+			p += x;
+			return p;
+		}
+		static private int _NumBits( int b ) {
+			int bit = 32768;
+			int acc = 0;
+			while ( bit > 0 ) {
+				if ( ( bit & b ) > 0 )
+					acc++;
+				bit >>= 1;
+			}
+			return acc;
+		}
+		// Create a cube
+		static public CGelloid CreateCube( int sizeX, int sizeY, int sizeZ, double gapX, double gapY, double gapZ ) {
+			CGelloid gelloid = new CGelloid();
+
+			double xoff = ( sizeX - 1.0 ) * gapX / 2.0;
+			double yoff = ( sizeY - 1.0 ) * gapY / 2.0;
+			double zoff = ( sizeZ - 1.0 ) * gapZ / 2.0;
+
+			for ( int z = 0; z < sizeZ; z++ )
+				for ( int y = 0; y < sizeY; y++ )
+					for ( int x = 0; x < sizeX; x++ )
+						gelloid.AddParticle( new CVector3( (double)x * gapX - xoff, (double)y * gapY - yoff, (double)z * gapZ - zoff ), new CVector3( 0, 0, 0 ) );
+
+			int p = 0;
+			for ( int z = 0; z < sizeZ; z++ ) {
+				for ( int y = 0; y < sizeY; y++ ) {
+					for ( int x = 0; x < sizeX; x++ ) {
+
+						for ( int cz = 0; cz <= 2; cz++ ) {
+							for ( int cy = 0; cy <= 2; cy++ ) {
+								for ( int cx = 0; cx <= 2; cx++ ) {
+						
+									int p2 = _CalcPointNum( x+cx, y+cy, z+cz, sizeX, sizeY, sizeZ );
+									if ( (x+cx) < sizeX )
+										if ( (y+cy) < sizeY )
+											if ( (z+cz) < sizeZ )
+												if ( p != p2 ) {
+													int OnEdge1 = (
+														(Convert.ToInt32(    (x)==0         ) << 0) |
+														(Convert.ToInt32(    (y)==0         ) << 1) |
+														(Convert.ToInt32(    (z)==0         ) << 2) |
+														(Convert.ToInt32(    (x)==(sizeX-1) ) << 3) |
+														(Convert.ToInt32(    (y)==(sizeY-1) ) << 4) |
+														(Convert.ToInt32(    (z)==(sizeZ-1) ) << 5)
+														);
+
+													int OnEdge2 = (
+														(Convert.ToInt32( (x+cx)==0         ) << 0) |
+														(Convert.ToInt32( (y+cy)==0         ) << 1) |
+														(Convert.ToInt32( (z+cz)==0         ) << 2) |
+														(Convert.ToInt32( (x+cx)==(sizeX-1) ) << 3) |
+														(Convert.ToInt32( (y+cy)==(sizeY-1) ) << 4) |
+														(Convert.ToInt32( (z+cz)==(sizeZ-1) ) << 5)
+														);
+
+													bool EdgeColor = false;
+													if ( ( cx < 2 ) && ( cy < 2 ) && ( cz < 2 ) )
+														EdgeColor = _NumBits( ( OnEdge1 & OnEdge2) ) > 1;
+
+													// EdgeColor should be more sophisticated and should use the different SpringKind
+													gelloid.AddSpring( p, p2, EdgeColor ? CSpring.ESpringKind.STRUCTURAL : CSpring.ESpringKind.SHEAR );
+												}
+								}
+							}
+						}
+						p++;
+					}
+				}
+			}
+			return gelloid;
+		}
+
+		// Add a spring, specifying 2 indices
+		public void AddSpring( int p1, int p2, CSpring.ESpringKind kind ) {
+			CSpring spring = new CSpring();
+			spring.p1 = p1;
+			spring.p2 = p2;
+			spring.restLength = ( ((CParticle)currentSystem[spring.p1]).position - ((CParticle)currentSystem[spring.p2]).position ).magnitude();
+			spring.kind = kind;
+			springs.Add( spring );
+		}
+
+		// Add a particle
+		public void AddParticle( CVector3 position, CVector3 velocity ) {
+			CParticle particle = new CParticle();
+			particle.position = position;
+			particle.velocity = velocity;
+			currentSystem.Add( particle );
+		}
+
+		// Add a collider
+		public void AddCollider( CCollider collider ) {
+			colliders.Add( collider );
+		}
+
+		// Rotate entire gelly
+		public void Rotate( CVector3 axis, double angle ) {
+			foreach ( CParticle particle in currentSystem )
+				particle.position.rotateVector( angle, axis );
+		}
+
+		// Translate entire gelly
+		public void Translate( CVector3 trans ) {
+			foreach ( CParticle particle in currentSystem )
+				particle.position = particle.position + trans;
+		}
+
+		// Give the gelly some spin
+		public void AddAngularMom( CVector3 axis, double spin ) {
+			foreach ( CParticle particle in currentSystem ) {
+				CVector3 p2 = new CVector3( particle.position );
+				p2.rotateVector( spin, axis );
+				particle.velocity += p2 - particle.position;
+			}
+		}
+
+		// Give the gelly some velocity
+		public void AddVelocity( CVector3 vel ) {
+			foreach ( CParticle particle in currentSystem )
+				particle.velocity += vel;
+		}
+
+		private void ComputeForces( ArrayList system ) {
+			// Compute forces
+			foreach ( CParticle particle in system ) {
+				// Reset force
+				particle.force = new CVector3( 0, 0, 0 );
+				// Apply gravity
+				particle.force = particle.force + ( gravity * particle.oneOverMass ); 
+				// Apply damping
+				particle.force = particle.force + ( particle.velocity * (-Kd) );
+			}
+
+			minHTerm = 10000; maxHTerm = -10000;
+			minDTerm = 10000; maxDTerm = -10000;
+				
+			// Do all springs
+			foreach ( CSpring spring in springs ) {
+				CParticle p1 = (CParticle)system[spring.p1];
+				CParticle p2 = (CParticle)system[spring.p2];
+
+				CVector3 deltaP = p1.position - p2.position;
+				double dist = deltaP.magnitude();
+				
+				double HTerm = ( dist - spring.restLength ) * spring.Ks;
+
+				if ( HTerm < minHTerm ) minHTerm = HTerm;
+				if ( HTerm > maxHTerm ) maxHTerm = HTerm;
+
+				// Affect particle only if difference is significative
+				//if ( System.Math.Abs( HTerm ) > minTolerance ) {
+				CVector3 deltaV = p1.velocity - p2.velocity;
+				double DTerm = ( ( deltaV | deltaP ) * spring.Kd ) / dist;
+
+				if ( DTerm < minDTerm ) minDTerm = DTerm;
+				if ( DTerm > maxDTerm ) maxDTerm = DTerm;
+
+				// Affect particle only if difference is significative
+				//if ( System.Math.Abs( DTerm ) > minTolerance ) {
+				CVector3 springForce = deltaP * ( 1.0 / dist );
+				springForce = springForce * (-(HTerm + DTerm));
+
+				p1.force = p1.force + springForce;
+				p2.force = p2.force - springForce;
+			}
+		}
+
+		private void Integrate( ArrayList initial, ArrayList source, ArrayList target, double deltaTime ) {
+			for ( int i = 0; i < initial.Count; i++ ) {
+				CParticle tP = (CParticle)target[i];
+				CParticle iP = (CParticle)initial[i];
+				CParticle sP = (CParticle)source[i];
+				// Determine the new velocity of the particle
+				tP.velocity = iP.velocity + ( sP.force * ( deltaTime * iP.oneOverMass ) );
+				// Set the new position
+				tP.position = iP.position + ( sP.velocity * deltaTime );
+			}
+		}
+
+//		public CCollider.ECollideState ResolveCollisions() {
+//			CCollider.ECollideState collisionState = CCollider.ECollideState.NOT_COLLIDING;
+//			if ( colliders == null )
+//				return collisionState;
+//			foreach( CParticle particle in currentSystem )
+//				foreach ( CCollider collider in colliders ) {
+//					CVector3 outNormal;
+//					if ( collider.collide( particle.position, particle.velocity, out outNormal ) != CCollider.ECollideState.NOT_COLLIDING ) {
+//						// Calculate Vn
+//						double VdotN = outNormal | particle.velocity;
+//						CVector3 Vn = outNormal * VdotN;
+//						// Calculate Vt
+//						CVector3 Vt = particle.velocity - Vn;
+//						// Scale Vn by coefficient of restitution
+//						Vn = Vn * Kr;
+//						// Set the velocity to be the new impulse
+//						particle.velocity = Vt - Vn;
+//						// Set collision state
+//						collisionState = CCollider.ECollideState.COLLIDING;
+//					}
+//				}
+//			return collisionState;
+//		}
+
+		public CCollider.ECollideState CheckForCollisions( ArrayList system ) {
+			CCollider.ECollideState collisionState = CCollider.ECollideState.NOT_COLLIDING;
+//			// TODO: reset collisions
+//			foreach ( CParticle particle in system ) {
+//				foreach ( CCollider collider in colliders ) {
+//					CCollider.ECollideState cState = collider.collide2( particle.position, particle.velocity, out outNormal );
+//					if ( cState == CCollider.ECollideState.PENETRATING )
+//						return cState;
+//					else if ( cState == CCollider.ECollideState.COLLIDING ) {
+//						// TODO: add a collision
+//						collisionState = cState;
+//					}
+//				}
+//			}
+			return collisionState;
+		}
+
+		public void ResolveCollisions( ArrayList system ) {
+			// foreach collision, solve collision
+		}
+
+		public void Simulate( double deltaTime ) {
+			double currentTime = 0;
+			double targetTime = deltaTime;
+
+			while ( currentTime < deltaTime ) {
+				ComputeForces( currentSystem );
+				Integrate( currentSystem, currentSystem, targetSystem, targetTime - currentTime );
+				CCollider.ECollideState collisionState = CheckForCollisions( targetSystem );
+
+				if ( collisionState == CCollider.ECollideState.PENETRATING ) {
+					targetTime = ( currentTime + targetTime ) / 2.0f; // Integrate on the first half
+				}
+				else {
+					if ( collisionState == CCollider.ECollideState.COLLIDING ) {
+						int counter = 0;
+						do {
+							ResolveCollisions( targetSystem );
+						} while ( ( CheckForCollisions( targetSystem ) == CCollider.ECollideState.COLLIDING ) && ( counter < 100 ) );
+					}
+
+					// we made a successful step, so swap configurations
+					// to "save" the data for the next step
+					currentTime = targetTime;
+					targetTime = deltaTime;
+
+					// Swap the 2 particles system buffer
+					ArrayList tempSystem = currentSystem;
+					currentSystem = targetSystem;
+					targetSystem = tempSystem;
+				}
+			}
+		}
+
+		public void Initialize() {
+			foreach ( CParticle pO in particles[0] ) { {
+					CParticle particle = new CParticle();
+					particle.Copy( pO );
+					particles[1].Add( particle );
+				} {
+					  CParticle particle = new CParticle();
+					  particle.Copy( pO );
+					  particles[2].Add( particle );
+				  }
+			}
+			currentSystem = particles[1];
+			targetSystem = particles[2];
+		}
+
+		public void Reset() {
+			Initialize();
+		}
+
+		public void InitializeGraphics( Device device, MyFont font ) {
+			this.device = device;
+			this.font = font;
+			vBuffer = new VertexBuffer( typeof(CustomVertex.PositionColored), particles[0].Count *3, device, Usage.Dynamic | Usage.WriteOnly, CustomVertex.PositionColored.Format, Pool.Default );
+			vertices = new CustomVertex.PositionColored[ particles[0].Count *3];
+			iBuffer = new IndexBuffer( typeof(short), springs.Count *2 + particles[0].Count*4, device, Usage.Dynamic | Usage.WriteOnly, Pool.Default );
+			indices = new short[springs.Count*2 + particles[0].Count*4];
+
+			materials = new Material[5];
+			// Particules
+			materials[0] = new Material();
+			materials[0].Ambient = materials[0].Diffuse = Color.White;
+			// Structural Springs
+			materials[1] = new Material();
+			materials[1].Ambient = materials[1].Diffuse = Color.White;
+			// Non-structural Springs
+			materials[2] = new Material();
+			materials[2].Ambient = Color.Blue; materials[2].Diffuse = Color.White;
+			// Velocity Vectors
+			materials[3] = new Material();
+			materials[3].Ambient = Color.Green; materials[3].Diffuse = Color.White;
+			// Force Vectors
+			materials[4] = new Material();
+			materials[4].Ambient = Color.Yellow; materials[4].Diffuse = Color.White;
+
+			foreach ( CCollider collider in colliders )
+				collider.InitGraphics( device );
+		}
+
+		public void Render() {
+			bool DRAW_PARTICLES = true;
+			bool DRAW_SPRINGS = false; bool DRAW_SPRINGS_NON_STRUCTURAL = false;
+			bool DRAW_VECTORS = true; bool DRAW_VELOCITY = true; bool DRAW_FORCE = true;
+			bool DRAW_COLLIDERS = true;
+			bool DISPLAY_INFOS = true;
+
+			device.Transform.World = Matrix.Identity;
+			device.RenderState.FillMode = FillMode.WireFrame;
+			device.RenderState.Lighting = true;
+			device.RenderState.Ambient = Color.White;
+			device.Lights[0].Enabled = true;
+			device.Lights[0].Diffuse = Color.White;
+			device.Lights[0].Position = new Vector3( 0, 1000, 0 );
+			device.Lights[0].Type = LightType.Point;
+			device.Lights[0].Attenuation0 = 1.0f;
+
+			for ( int i = 0; i < currentSystem.Count; i++ ) {
+				CParticle particle = (CParticle)currentSystem[i];
+				vertices[i].Position = new Vector3( (float)particle.position.X, (float)particle.position.Y, (float)particle.position.Z );
+				vertices[i].Color = Color.White.ToArgb();
+			}
+
+			if ( DRAW_PARTICLES ) {
+				// Draw particules
+				vBuffer.SetData( vertices, 0, LockFlags.None);
+				device.SetStreamSource( 0, vBuffer, 0);
+				device.VertexFormat = CustomVertex.PositionColored.Format;
+
+				device.Material = materials[0];
+				device.RenderState.FillMode = FillMode.WireFrame;
+				device.DrawPrimitives( PrimitiveType.PointList, 0, currentSystem.Count );
+
+//				device.RenderState.FillMode = FillMode.Solid;
+//				device.Material = materials[0];
+//				Mesh mesh = Mesh.Sphere( device, 5, 5, 5 );
+//				foreach ( CParticle particle in particlesCurrent ) {
+//					device.Transform.World = Matrix.Translation( (float)particle.position.X, (float)particle.position.Y, (float)particle.position.Z );
+//					mesh.DrawSubset(0);
+//				}
+//				device.Transform.World = Matrix.Identity;
+			}
+			if ( DRAW_SPRINGS ) {
+				// Draw springs
+				int s = 0;
+				foreach ( CSpring spring in springs ) {
+					if ( spring.kind == CSpring.ESpringKind.STRUCTURAL || DRAW_SPRINGS_NON_STRUCTURAL ) {
+						indices[s*2+0] = (short)spring.p1;
+						indices[s*2+1] = (short)spring.p2;
+						s++;
+					}
+					// TODO: structural in the begin of vector and non-structural in the end
+					// 2 calls to DrawIndexedPrimitives, one for structural and one for non-structural
+				}
+				vBuffer.SetData( vertices, 0, LockFlags.None);
+				iBuffer.SetData( indices, 0, LockFlags.None );
+				device.SetStreamSource( 0, vBuffer, 0);
+				device.Indices = iBuffer;
+				device.VertexFormat = CustomVertex.PositionColored.Format;
+
+				device.Material = materials[1];
+				device.RenderState.FillMode = FillMode.WireFrame;
+				device.DrawIndexedPrimitives( PrimitiveType.LineList, 0, 0, currentSystem.Count, 0, s );
+			}
+			if ( DRAW_VECTORS ) {
+				// Draw velocity and forces
+				int particlesCount = currentSystem.Count;
+				int i = 0;
+				foreach ( CParticle particle in currentSystem ) {
+					CVector3 to = particle.position + ( particle.velocity * 5 );
+					vertices[i+particlesCount].Position = new Vector3( (float)to.X, (float)to.Y, (float)to.Z );
+					vertices[i+particlesCount].Color = Color.Green.ToArgb();
+
+					to = particle.position + ( particle.force * 5 );
+					vertices[i+particlesCount*2].Position = new Vector3( (float)to.X, (float)to.Y, (float)to.Z );
+					vertices[i+particlesCount*2].Color = Color.Red.ToArgb();
+
+					i++;
+				}
+				int springsCount = springs.Count;
+				for ( i = 0; i < particlesCount; i++ ) {
+					indices[2*springsCount + i*2+0] = (short)i;
+					indices[2*springsCount + i*2+1] = (short)(particlesCount + i);
+
+					indices[2*springsCount + 2*particlesCount + i*2+0] = (short)i;
+					indices[2*springsCount + 2*particlesCount + i*2+1] = (short)(particlesCount*2 +i);
+				}
+				vBuffer.SetData( vertices, 0, LockFlags.None);
+				iBuffer.SetData( indices, 0, LockFlags.None );
+				device.SetStreamSource( 0, vBuffer, 0);
+				device.Indices = iBuffer;
+				device.VertexFormat = CustomVertex.PositionColored.Format;
+				if ( DRAW_VELOCITY ) {
+					device.Material = materials[3];
+					device.RenderState.FillMode = FillMode.WireFrame;
+					device.DrawIndexedPrimitives( PrimitiveType.LineList, 0, 0, particlesCount*2, springsCount*2, particlesCount );
+				}
+				if ( DRAW_FORCE ) {
+					device.Material = materials[4];
+					device.RenderState.FillMode = FillMode.WireFrame;
+					device.DrawIndexedPrimitives( PrimitiveType.LineList, 0, 0, particlesCount*3, springsCount*2+particlesCount*2, particlesCount );
+				}
+				// BOTH: device.DrawIndexedPrimitives( PrimitiveType.LineList, 0, 0, particlesCount*3, springsCount*2, particlesCount*2 );
+			}
+			if ( DRAW_COLLIDERS ) {
+				foreach ( CCollider collider in colliders )
+					collider.Render();
+			}
+
+			if ( DISPLAY_INFOS ) {
+				font.DrawText("HTerm min: "+minHTerm, 0, 400, Color.White, false );
+				font.DrawText("HTerm max: "+maxHTerm, 0, 410, Color.White, false );
+				font.DrawText("DTerm min: "+minDTerm, 0, 420, Color.White, false );
+				font.DrawText("DTerm max: "+maxDTerm, 0, 430, Color.White, false );
+				int y = 0; int x = 0;
+				int i = 0;
+				foreach ( CParticle particle in currentSystem ) {
+					font.DrawText("Particle: "+i, x, y, Color.White, false); y += 10;
+					font.DrawText("Pos: "+particle.position, x, y, Color.White, false ); y += 10;
+					font.DrawText("Vel: "+particle.velocity, x, y, Color.White, false ); y += 10;
+					font.DrawText("Force: "+particle.force, x, y, Color.White, false ); y += 10;
+					font.DrawText("Mass: "+particle.oneOverMass, x, y, Color.White, false ); y += 10;
+					i++;
+				}
+				i = 0;
+				y = 0; x = 400;
+				foreach ( CParticle particle in targetSystem ) {
+					font.DrawText("Particle: "+i, x, y, Color.White, false); y += 10;
+					font.DrawText("Pos: "+particle.position, x, y, Color.White, false ); y += 10;
+					font.DrawText("Vel: "+particle.velocity, x, y, Color.White, false ); y += 10;
+					font.DrawText("Force: "+particle.force, x, y, Color.White, false ); y += 10;
+					font.DrawText("Mass: "+particle.oneOverMass, x, y, Color.White, false ); y += 10;
+					i++;
+				}
+				/*
+				i = 0;
+				foreach ( CSpring spring in springs ) {
+					font.DrawText("Spring: "+i, x, y, Color.White, false); y += 10;
+					font.DrawText("p1: "+spring.p1, x, y, Color.White, false); y += 10;
+					font.DrawText("p2: "+spring.p2, x, y, Color.White, false); y += 10;
+					font.DrawText("Kd: "+spring.Kd, x, y, Color.White, false); y += 10;
+					font.DrawText("Ks: "+spring.Ks, x, y, Color.White, false); y += 10;
+					font.DrawText("Length: "+spring.restLength, x, y, Color.White, false); y += 10;
+					i++;
+				}
+				*/
+			}
+		}
+	}
+}

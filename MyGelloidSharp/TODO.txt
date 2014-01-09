@@ -1,0 +1,17 @@
+fix collision with circle, square, cylinder
+redo Render()
+  no more hacky indexes, compute maximal iBuffer and vBuffer and always starts with indices and vertices at 0
+collisions: instead of using binary search to find intersection point, compute intersection point
+new colliders: halfplane, stairs
+screenshot
+
+SetMouseForce doesn't seem to work
+
+cuboid.scn crashes (too small delta time step)
+cylinder.scn crashes too
+
+sphere Tu, Tv
+
+finish spiral spring scene
+
+Instead of using CreateSphere, CreateCylinder, ...
