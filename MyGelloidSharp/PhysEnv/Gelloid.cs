@@ -47,7 +47,6 @@ namespace MyGelloidSharp.PhysEnv
         [XmlElement("useGravity")] public bool UseGravity = true;
         [XmlElement("useDamping")] public bool UseDamping = true;
         [XmlElement("useMouse")] public bool UseMouse = false;
-        //[XmlElement("useUniversalGravitation")] public bool UseUniversalGravitation = false;
 
         [XmlElement("textureName")] public string TextureName = "belarge.bmp";
 
@@ -1030,7 +1029,7 @@ namespace MyGelloidSharp.PhysEnv
         }
 
         // Get the center of Gelloid bounding box
-        public Vector3 BBCenter()
+        public Vector3 BoundingBoxCenter()
         {
             float minX = 10000, minY = 10000, minZ = 10000;
             float maxX = -10000, maxY = -10000, maxZ = -10000;
@@ -1060,15 +1059,15 @@ namespace MyGelloidSharp.PhysEnv
         }
 
         // Add a spring, specifying 2 indices
-        public int AddSpring(int p1i, int p2i, CSpring.ESpringKind kind)
+        public int AddSpring(int index1, int index2, CSpring.ESpringKind kind)
         {
             CSpring spring = new CSpring
                 {
-                    P1Index = p1i,
-                    P2Index = p2i
+                    Index1 = index1,
+                    Index2 = index2
                 };
-            CParticle p1 = FindParticle(p1i);
-            CParticle p2 = FindParticle(p2i);
+            CParticle p1 = FindParticle(index1);
+            CParticle p2 = FindParticle(index2);
             spring.RestLength = (p1.Position - p2.Position).Length();
             spring.Kind = kind;
             Springs.Add(spring);
@@ -1076,15 +1075,15 @@ namespace MyGelloidSharp.PhysEnv
         }
 
         // Add a spring, specifying 2 indices and spring additional informations
-        public int AddSpring(int p1i, int p2i, CSpring.ESpringKind kind, float Ks, float Kd, float maxExtension)
+        public int AddSpring(int index1, int index2, CSpring.ESpringKind kind, float Ks, float Kd, float maxExtension)
         {
             CSpring spring = new CSpring
                 {
-                    P1Index = p1i,
-                    P2Index = p2i
+                    Index1 = index1,
+                    Index2 = index2
                 };
-            CParticle p1 = FindParticle(p1i);
-            CParticle p2 = FindParticle(p2i);
+            CParticle p1 = FindParticle(index1);
+            CParticle p2 = FindParticle(index2);
             spring.RestLength = (p1.Position - p2.Position).Length();
             spring.Kind = kind;
             spring.Ks = Ks;
@@ -1189,15 +1188,12 @@ namespace MyGelloidSharp.PhysEnv
         // Compute force applied on each particles
         private void ComputeForces(List<CParticle> system, Vector3 gravity, Vector3 windDirection, float windSpeed, Vector3 mouseForce, float mouseKs)
         {
-            //// 1 / Mass
-            //float oneOverMass = 1.0f/Mass;
             // Compute forces
             foreach (CParticle particle in system)
             {
                 particle.ResetForce();
                 if (particle.NotMovable)
                     continue;
-                //if (UseUniversalGravitation) particle.ApplyForce(GravitationalForce * oneOverMass);
                 if (UseGravity) particle.ApplyGravity(gravity);
                 if (UseDamping) particle.ApplyDamping(Kd);
                 if (UseWind) particle.ApplyWind(windDirection, windSpeed);
@@ -1532,8 +1528,8 @@ namespace MyGelloidSharp.PhysEnv
                     foreach (CSpring spring in Springs)
                         if (spring.Broken)
                         {
-                            _indices[s*2 + 0] = (short) spring.P1Index;
-                            _indices[s*2 + 1] = (short) spring.P2Index;
+                            _indices[s*2 + 0] = (short) spring.Index1;
+                            _indices[s*2 + 1] = (short) spring.Index2;
                             s++;
                         }
                     if (s > 0)
@@ -1558,8 +1554,8 @@ namespace MyGelloidSharp.PhysEnv
                     {
                         if (spring.Kind == springKind && !spring.Broken)
                         {
-                            _indices[s*2 + 0] = (short) spring.P1Index;
-                            _indices[s*2 + 1] = (short) spring.P2Index;
+                            _indices[s*2 + 0] = (short) spring.Index1;
+                            _indices[s*2 + 1] = (short) spring.Index2;
                             s++;
                         }
                     }
@@ -1777,9 +1773,9 @@ namespace MyGelloidSharp.PhysEnv
                 {
                     Font.DrawText("Spring: " + i, x, y, Color.White, false);
                     y += 10;
-                    Font.DrawText("p1: " + spring.P1Index, x, y, Color.White, false);
+                    Font.DrawText("p1: " + spring.Index1, x, y, Color.White, false);
                     y += 10;
-                    Font.DrawText("p2: " + spring.P2Index, x, y, Color.White, false);
+                    Font.DrawText("p2: " + spring.Index2, x, y, Color.White, false);
                     y += 10;
                     Font.DrawText("Kd: " + spring.Kd, x, y, Color.White, false);
                     y += 10;
@@ -1814,8 +1810,8 @@ namespace MyGelloidSharp.PhysEnv
                 int broken = 0;
                 foreach (CSpring spring in Springs)
                 {
-                    CParticle p1 = ParticlesCurrent[spring.P1Index];
-                    CParticle p2 = ParticlesCurrent[spring.P2Index];
+                    CParticle p1 = ParticlesCurrent[spring.Index1];
+                    CParticle p2 = ParticlesCurrent[spring.Index2];
                     length += (p1.Position - p2.Position).Length();
                     switch (spring.Kind)
                     {

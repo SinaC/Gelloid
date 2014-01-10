@@ -50,8 +50,8 @@ namespace MyGelloidSharp.UserControls {
 		#region Exposed Properties
 		public override void Get( object o ) {	
 			CSpring spring = (CSpring)o;
-			spring.P1Index = SpringParticle1;
-			spring.P2Index = SpringParticle2;
+			spring.Index1 = SpringParticle1;
+			spring.Index2 = SpringParticle2;
 			spring.Kind = SpringKind;
 			spring.Ks = SpringKs;
 			spring.Kd = SpringKd;
@@ -62,8 +62,8 @@ namespace MyGelloidSharp.UserControls {
 
 		public override void Set( object o ) {
 			CSpring spring = (CSpring)o;
-			SpringParticle1 = spring.P1Index;
-			SpringParticle2 = spring.P2Index;
+			SpringParticle1 = spring.Index1;
+			SpringParticle2 = spring.Index2;
 			SpringKind = spring.Kind;
 			SpringKs = spring.Ks;
 			SpringKd = spring.Kd;

@@ -8,7 +8,6 @@ namespace MyGelloidSharp.PhysEnv
     {
         // Default particle mass
         [XmlIgnore] public const float DefaultOneOverMass = 1.0f;
-        [XmlIgnore] public const float DefaultMass = 1.0f;
         // Velocity Threshold that decides between Static and Kinetic Friction
         [XmlIgnore] public const float StaticFrictionThreshold = 0.03f;
 
@@ -16,7 +15,6 @@ namespace MyGelloidSharp.PhysEnv
         [XmlElement("velocity")] public Vector3 Velocity; // Velocity of Particle
         [XmlElement("force")] public Vector3 Force; // Force acting on Particle
         [XmlElement("oneOverMass")] public float OneOverMass; // 1 / Mass of Particle
-        [XmlElement("mass")] public float Mass; // Mass of particle
 
         [XmlElement("inContact")] public bool InContact; // If true, particle is in contact with a collider
         [XmlElement("normalAtContact")] public Vector3 NormatAtContact; // Normal at contact point, if in contact
@@ -31,7 +29,6 @@ namespace MyGelloidSharp.PhysEnv
             Velocity = Vector3.Empty;
             Force = Vector3.Empty;
             OneOverMass = DefaultOneOverMass;
-            Mass = DefaultMass;
 
             InContact = false;
             NormatAtContact = Vector3.Empty;
@@ -46,11 +43,6 @@ namespace MyGelloidSharp.PhysEnv
             // Reset force
             Force = Vector3.Empty;
         }
-
-        //public void ApplyForce(Vector3 force)
-        //{
-        //    Force += force;
-        //}
 
         public void ApplyGravity(Vector3 gravity)
         {

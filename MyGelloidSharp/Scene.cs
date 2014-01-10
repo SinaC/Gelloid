@@ -38,11 +38,6 @@ namespace MyGelloidSharp
         [XmlIgnore] public Vector3 MouseForce = new Vector3(0, 0, 0);
         [XmlElement("MouseKs")] public float MouseKs = 2.0f;
 
-        //// Constants
-        ////[XmlIgnore] public const float GravitationalConstant = 6.67384E-11f; // N.m²/kg²
-        //[XmlIgnore]
-        //public const float GravitationalConstant = 10f; // N.m²/kg²
-
         // Scene name
         [XmlElement("Name")] public string Name = "Scene";
 
@@ -762,28 +757,6 @@ namespace MyGelloidSharp
 
         public void Simulate(float deltaTime)
         {
-            //// Compute gravity center
-            //foreach (CGelloid gelloid in Gelloids)
-            //    gelloid.ComputeGravityCenter();
-            //// Reset gravitation force
-            //foreach (CGelloid gelloid in Gelloids)
-            //    gelloid.GravitationalForce = Vector3.Empty; // Reset
-            //// Compute gravitation force for each gelloid
-            //foreach (CGelloid gelloid in Gelloids)
-            //{
-            //    CGelloid gelloid1 = gelloid;
-            //    foreach (CGelloid otherGelloid in Gelloids.Where(x => x != gelloid1))
-            //    {
-            //        // Compute distance from gravity center
-            //        Vector3 distanceVector = gelloid1.GravityCenter - otherGelloid.GravityCenter;
-            //        float distance = distanceVector.LengthSq();
-            //        // Compute gravitional force
-            //        Vector3 direction = Vector3.Normalize(distanceVector);
-            //        float gravitationalForceLength = GravitationalConstant*gelloid1.Mass*otherGelloid.Mass/distance;
-            //        otherGelloid.GravitationalForce += direction * gravitationalForceLength;
-            //        gelloid1.GravitationalForce += direction * -gravitationalForceLength;
-            //    }
-            //}
             // Simulate
             foreach (CGelloid gelloid in Gelloids)
                 gelloid.Simulate(deltaTime, Colliders, Gravity, WindDirection, WindSpeed, MouseForce, MouseKs);

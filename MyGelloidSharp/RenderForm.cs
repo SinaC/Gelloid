@@ -396,9 +396,9 @@ namespace MyGelloidSharp {
 			if ( CameraRotating ) //Compute new angle from a time reference
 				_cameraAngle = (Environment.TickCount % period) * 2.0f * (float)Math.PI / (float)period;
 			if ( CameraCentered ) {
-				//scene.camera.Center( scene.gelloids[0].BBCenter() );
-				//scene.camera.look = scene.gelloids[0].BBCenter();
-				Scene.CurrentCamera.SetTarget( Scene.Gelloids[0].BBCenter() );
+				//scene.camera.Center( scene.gelloids[0].BoundingBoxCenter() );
+				//scene.camera.look = scene.gelloids[0].BoundingBoxCenter();
+				Scene.CurrentCamera.SetTarget( Scene.Gelloids[0].BoundingBoxCenter() );
 				//Vector3 diff = scene.camera.look - scene.camera.pos;
 				//scene.camera.radius = diff.Length();
 

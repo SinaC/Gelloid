@@ -105,19 +105,11 @@
       <HintPath>..\..\..\WINDOWS\Microsoft.NET\DirectX for Managed Code\1.0.2908.0\Microsoft.DirectX.Direct3DX.dll</HintPath>
       <AssemblyFolderKey>hklm\dn\dx_1.0.2908.0</AssemblyFolderKey>
     </Reference>
-    <Reference Include="Microsoft.DirectX.DirectInput">
-      <Name>Microsoft.DirectX.DirectInput</Name>
-      <HintPath>..\..\..\WINDOWS\Microsoft.NET\DirectX for Managed Code\1.0.2902.0\Microsoft.DirectX.DirectInput.dll</HintPath>
-      <AssemblyFolderKey>hklm\dn\dx_1.0.2902.0</AssemblyFolderKey>
-    </Reference>
     <Reference Include="System">
       <Name>System</Name>
     </Reference>
     <Reference Include="System.Core">
       <RequiredTargetFramework>3.5</RequiredTargetFramework>
-    </Reference>
-    <Reference Include="System.Data">
-      <Name>System.Data</Name>
     </Reference>
     <Reference Include="System.Drawing">
       <Name>System.Drawing</Name>

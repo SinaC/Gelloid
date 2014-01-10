@@ -10,8 +10,8 @@ namespace MyGelloidSharp.PhysEnv {
 
 		public enum ESpringKind { Structural, Shear, Bend, Manual };
 
-		[XmlElement("p1")] public int P1Index; // Particles bonded by Spring (indices in a particle collection)
-		[XmlElement("p2")] public int P2Index;
+		[XmlElement("p1")] public int Index1; // Particles bonded by Spring (indices in a particle collection)
+		[XmlElement("p2")] public int Index2;
 		[XmlElement("restLength")] public float RestLength; // Length of Spring at rest
 		[XmlElement("Ks")] public float Ks; // Spring constant
 		[XmlElement("Kd")] public float Kd; // Spring damping
@@ -20,7 +20,7 @@ namespace MyGelloidSharp.PhysEnv {
 		[XmlElement("kind")] public ESpringKind Kind; // Spring kind
 
 		public CSpring() {
-			P1Index = P2Index = 0;
+			Index1 = Index2 = 0;
 			RestLength = 1.0f;
 			Ks = DefaultKs;
 			Kd = DefaultKd;
@@ -31,8 +31,8 @@ namespace MyGelloidSharp.PhysEnv {
 
 		public void Apply( List<CParticle> particles ) {
 			if ( !Broken ) {
-				CParticle p1 = particles[P1Index];
-				CParticle p2 = particles[P2Index];
+				CParticle p1 = particles[Index1];
+				CParticle p2 = particles[Index2];
 				Vector3 deltaP = p1.Position - p2.Position;
 				float dist = deltaP.Length();
 
